@@ -1,2 +1,0 @@
-# TriDa
-Proyecto TriDa
