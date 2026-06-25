@@ -1,0 +1,216 @@
+import { BANKS, DEVICES, USERS, generateTransaction } from './mockData';
+
+const now = new Date();
+const iso = (minutesAgo) => new Date(now.getTime() - minutesAgo * 60_000).toISOString();
+
+const sampleTransactions = Array.from({ length: 14 }, (_, i) => {
+  const txn = generateTransaction(i + 1);
+  return {
+    ...txn,
+    createdAt: iso(i * 12),
+    updatedAt: iso(i * 7),
+  };
+});
+
+export const initialDb = {
+  users: USERS.slice(0, 8).map((u, index) => ({
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    role: u.role,
+    bank: u.bank,
+    status: u.status,
+    risk: u.risk,
+    createdAt: iso(900 + index * 40),
+    updatedAt: iso(120 + index * 12),
+  })),
+  transactions: sampleTransactions.map(t => ({
+    id: t.id,
+    user: t.user,
+    bank: t.bank.name,
+    type: t.type,
+    amount: t.amount,
+    riskScore: t.riskScore,
+    status: t.status,
+    channel: t.channel,
+    city: t.location.city,
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+  })),
+  alerts: sampleTransactions.filter(t => t.alertLevel === 'critical' || t.alertLevel === 'high' || t.status !== 'approved').slice(0, 10).map((t, index) => ({
+    id: `ALT-${String(index + 1).padStart(4, '0')}`,
+    transactionId: t.id,
+    severity: t.alertLevel,
+    title: t.riskScore >= 90 ? 'Bloqueo automático por riesgo crítico' : 'Transacción marcada para revisión',
+    status: index % 3 === 0 ? 'open' : index % 3 === 1 ? 'review' : 'closed',
+    assignedTo: index % 2 === 0 ? 'Analista IA' : 'Mesa de fraude',
+    createdAt: iso(30 + index * 11),
+    updatedAt: iso(8 + index * 5),
+  })),
+  banks: BANKS.slice(1, 9).map((b, index) => ({
+    id: b.id,
+    name: b.name,
+    color: b.color,
+    country: 'Colombia',
+    status: index % 5 === 0 ? 'maintenance' : 'active',
+    dailyLimit: 120000000 + index * 5500000,
+    createdAt: iso(2000 + index * 50),
+    updatedAt: iso(250 + index * 15),
+  })),
+  devices: DEVICES.slice(0, 10).map((d, index) => ({
+    id: d.id,
+    type: d.type,
+    brand: d.brand,
+    os: d.os,
+    status: index % 4 === 0 ? 'review' : 'trusted',
+    owner: USERS[index % USERS.length]?.name || 'Usuario TriDa',
+    createdAt: iso(1600 + index * 35),
+    updatedAt: iso(110 + index * 9),
+  })),
+  rules: [
+    { id: 'RUL-001', name: 'Monto inusual nocturno', metric: 'amount_time_anomaly', threshold: 75, action: 'flagged', status: 'active', createdAt: iso(1300), updatedAt: iso(80) },
+    { id: 'RUL-002', name: 'Cambio de país repentino', metric: 'geo_velocity', threshold: 85, action: 'blocked', status: 'active', createdAt: iso(1250), updatedAt: iso(70) },
+    { id: 'RUL-003', name: 'Dispositivo no confiable', metric: 'device_reputation', threshold: 65, action: 'review', status: 'active', createdAt: iso(1200), updatedAt: iso(65) },
+    { id: 'RUL-004', name: 'Demasiados intentos fallidos', metric: 'failed_attempts', threshold: 5, action: 'blocked', status: 'draft', createdAt: iso(1150), updatedAt: iso(60) },
+  ],
+  models: [
+    { id: 'MDL-001', name: 'TriDa FraudNet v4', version: '4.2.1', accuracy: 94.2, recall: 91.7, status: 'production', createdAt: iso(2400), updatedAt: iso(35) },
+    { id: 'MDL-002', name: 'AnomalyGraph LatAm', version: '2.8.0', accuracy: 91.5, recall: 88.1, status: 'staging', createdAt: iso(2100), updatedAt: iso(120) },
+    { id: 'MDL-003', name: 'DeviceTrust Score', version: '1.9.3', accuracy: 89.9, recall: 86.3, status: 'training', createdAt: iso(1800), updatedAt: iso(200) },
+  ],
+  auditLogs: [
+    { id: 'AUD-001', actor: 'admin@trida.co', action: 'LOGIN_SUCCESS', entity: 'auth', result: 'success', ip: '190.14.22.10', createdAt: iso(3), updatedAt: iso(3) },
+    { id: 'AUD-002', actor: 'analyst@trida.co', action: 'ALERT_REVIEWED', entity: 'alerts', result: 'success', ip: '190.14.22.20', createdAt: iso(14), updatedAt: iso(14) },
+    { id: 'AUD-003', actor: 'operator@trida.co', action: 'TRANSACTION_FLAGGED', entity: 'transactions', result: 'success', ip: '190.14.22.33', createdAt: iso(18), updatedAt: iso(18) },
+    { id: 'AUD-004', actor: 'system', action: 'BACKEND_SYNC', entity: 'integrations', result: 'fallback', ip: '127.0.0.1', createdAt: iso(25), updatedAt: iso(25) },
+  ],
+};
+
+export const resourceConfig = {
+  users: {
+    label: 'Usuarios',
+    singular: 'usuario',
+    description: 'Cuentas internas y clientes con rol, banco asignado y riesgo operacional.',
+    route: '/admin/usuarios',
+    idPrefix: 'USR',
+    columns: ['name', 'email', 'role', 'bank', 'status', 'risk'],
+    fields: [
+      { name: 'name', label: 'Nombre completo', type: 'text', required: true },
+      { name: 'email', label: 'Correo', type: 'email', required: true },
+      { name: 'role', label: 'Rol', type: 'select', options: ['admin', 'analyst', 'operator', 'client'], required: true },
+      { name: 'bank', label: 'Banco asignado', type: 'select', options: BANKS.slice(1).map(b => b.id), required: true },
+      { name: 'status', label: 'Estado', type: 'select', options: ['active', 'inactive', 'review'], required: true },
+      { name: 'risk', label: 'Riesgo', type: 'number', required: true },
+    ],
+  },
+  transactions: {
+    label: 'Transacciones',
+    singular: 'transacción',
+    description: 'Movimientos evaluados por el motor de riesgo en tiempo real.',
+    route: '/admin/transacciones',
+    idPrefix: 'TXN',
+    columns: ['user', 'bank', 'type', 'amount', 'riskScore', 'status'],
+    fields: [
+      { name: 'user', label: 'Usuario', type: 'text', required: true },
+      { name: 'bank', label: 'Banco', type: 'text', required: true },
+      { name: 'type', label: 'Tipo', type: 'text', required: true },
+      { name: 'amount', label: 'Monto', type: 'number', required: true },
+      { name: 'riskScore', label: 'Riesgo', type: 'number', required: true },
+      { name: 'status', label: 'Estado', type: 'select', options: ['approved', 'flagged', 'blocked'], required: true },
+      { name: 'channel', label: 'Canal', type: 'select', options: ['mobile', 'web', 'pos'], required: true },
+      { name: 'city', label: 'Ciudad', type: 'text', required: true },
+    ],
+  },
+  alerts: {
+    label: 'Alertas',
+    singular: 'alerta',
+    description: 'Casos generados por reglas, modelos IA y señales de comportamiento.',
+    route: '/admin/alertas',
+    idPrefix: 'ALT',
+    columns: ['transactionId', 'severity', 'title', 'status', 'assignedTo'],
+    fields: [
+      { name: 'transactionId', label: 'Transacción', type: 'text', required: true },
+      { name: 'severity', label: 'Severidad', type: 'select', options: ['low', 'medium', 'high', 'critical'], required: true },
+      { name: 'title', label: 'Título', type: 'text', required: true },
+      { name: 'status', label: 'Estado', type: 'select', options: ['open', 'review', 'closed'], required: true },
+      { name: 'assignedTo', label: 'Asignado a', type: 'text', required: true },
+    ],
+  },
+  banks: {
+    label: 'Bancos',
+    singular: 'banco',
+    description: 'Entidades financieras conectadas a TriDa y sus reglas operativas.',
+    route: '/admin/bancos',
+    idPrefix: 'BNK',
+    columns: ['name', 'country', 'status', 'dailyLimit', 'color'],
+    fields: [
+      { name: 'name', label: 'Nombre', type: 'text', required: true },
+      { name: 'country', label: 'País', type: 'text', required: true },
+      { name: 'status', label: 'Estado', type: 'select', options: ['active', 'maintenance', 'inactive'], required: true },
+      { name: 'dailyLimit', label: 'Límite diario', type: 'number', required: true },
+      { name: 'color', label: 'Color', type: 'color', required: true },
+    ],
+  },
+  devices: {
+    label: 'Dispositivos',
+    singular: 'dispositivo',
+    description: 'Terminales registrados, reputación y dueño asociado.',
+    route: '/admin/dispositivos',
+    idPrefix: 'DEV',
+    columns: ['type', 'brand', 'os', 'status', 'owner'],
+    fields: [
+      { name: 'type', label: 'Tipo', type: 'text', required: true },
+      { name: 'brand', label: 'Marca', type: 'text', required: true },
+      { name: 'os', label: 'Sistema operativo', type: 'text', required: true },
+      { name: 'status', label: 'Estado', type: 'select', options: ['trusted', 'review', 'blocked'], required: true },
+      { name: 'owner', label: 'Dueño', type: 'text', required: true },
+    ],
+  },
+  rules: {
+    label: 'Reglas antifraude',
+    singular: 'regla',
+    description: 'Parámetros de decisión para marcar, revisar o bloquear movimientos.',
+    route: '/admin/reglas',
+    idPrefix: 'RUL',
+    columns: ['name', 'metric', 'threshold', 'action', 'status'],
+    fields: [
+      { name: 'name', label: 'Nombre', type: 'text', required: true },
+      { name: 'metric', label: 'Métrica', type: 'text', required: true },
+      { name: 'threshold', label: 'Umbral', type: 'number', required: true },
+      { name: 'action', label: 'Acción', type: 'select', options: ['review', 'flagged', 'blocked'], required: true },
+      { name: 'status', label: 'Estado', type: 'select', options: ['active', 'draft', 'paused'], required: true },
+    ],
+  },
+  models: {
+    label: 'Modelos IA',
+    singular: 'modelo',
+    description: 'Modelos predictivos usados para puntuar riesgo y anomalías.',
+    route: '/admin/modelos',
+    idPrefix: 'MDL',
+    columns: ['name', 'version', 'accuracy', 'recall', 'status'],
+    fields: [
+      { name: 'name', label: 'Nombre', type: 'text', required: true },
+      { name: 'version', label: 'Versión', type: 'text', required: true },
+      { name: 'accuracy', label: 'Accuracy %', type: 'number', required: true },
+      { name: 'recall', label: 'Recall %', type: 'number', required: true },
+      { name: 'status', label: 'Estado', type: 'select', options: ['production', 'staging', 'training', 'archived'], required: true },
+    ],
+  },
+  auditLogs: {
+    label: 'Auditoría',
+    singular: 'evento de auditoría',
+    description: 'Trazabilidad de accesos, cambios de datos y sincronizaciones.',
+    route: '/admin/auditoria',
+    idPrefix: 'AUD',
+    columns: ['actor', 'action', 'entity', 'result', 'ip'],
+    fields: [
+      { name: 'actor', label: 'Actor', type: 'text', required: true },
+      { name: 'action', label: 'Acción', type: 'text', required: true },
+      { name: 'entity', label: 'Entidad', type: 'text', required: true },
+      { name: 'result', label: 'Resultado', type: 'select', options: ['success', 'warning', 'fallback', 'error'], required: true },
+      { name: 'ip', label: 'IP', type: 'text', required: true },
+    ],
+  },
+};
+
+export const crudResourceKeys = Object.keys(resourceConfig);
